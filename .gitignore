@@ -1,1 +1,42 @@
-models/models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志和缓存
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# 模型文件（如果有大文件）
+models/
+*.bin
+*.pkl
+*.h5
+*.pt
+
+# 向量数据库
+vector_store/
+chroma_db/
