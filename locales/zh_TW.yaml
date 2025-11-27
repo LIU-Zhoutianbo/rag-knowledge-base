@@ -1,0 +1,68 @@
+# 繁體中文語言配置
+
+app:
+  title: "RAG 知識庫問答系統"
+  description: "基於檢索增強生成的智能問答系統"
+  
+sidebar:
+  settings: "⚙️ 系統設置"
+  llm_config: "🤖 LLM 配置"
+  select_provider: "選擇 LLM 提供商"
+  ollama_local: "Ollama (本地免費)"
+  deepseek_online: "DeepSeek (在線，便宜)"
+  qwen_online: "通義千問 (在線)"
+  ollama_url: "Ollama URL"
+  select_model: "選擇模型"
+  api_key: "API Key"
+  temperature: "Temperature"
+  max_tokens: "Max Tokens"
+  initialize_rag: "🚀 初始化 RAG 系統"
+  
+  document_management: "📁 文檔管理"
+  upload_documents: "上傳文檔"
+  process_documents: "📤 處理並添加文檔"
+  
+  knowledge_base_info: "📊 知識庫信息"
+  document_chunks: "文檔塊數量"
+  clear_knowledge_base: "🗑️ 清空知識庫"
+  
+  language_settings: "🌐 語言設置"
+  select_language: "選擇語言"
+
+main:
+  usage_instructions: "ℹ️ 使用說明"
+  step1: "1. 在側邊欄選擇 LLM 提供商並初始化 RAG 系統"
+  step2: "2. 上傳文檔到知識庫"
+  step3: "3. 開始提問！"
+  
+  empty_knowledge_base: "⚠️ 知識庫為空，請先上傳文檔"
+  
+  view_sources: "📖 查看來源"
+  source: "來源"
+  similarity: "相似度"
+  response_time: "⏱️ 響應時間"
+  seconds: "秒"
+  
+  input_placeholder: "輸入您的問題..."
+  thinking: "🤔 思考中..."
+
+messages:
+  rag_initialized: "✅ RAG 系統初始化成功！"
+  initialization_failed: "❌ 初始化失敗"
+  processing_documents: "正在處理文檔..."
+  document_processed: "✅ 文檔處理成功！"
+  documents_count: "文檔數量"
+  chunks_count: "切分塊數"
+  total_characters: "總字符數"
+  avg_chunk_size: "平均塊大小"
+  characters: "字符"
+  processing_failed: "❌ 處理文檔失敗"
+  knowledge_base_cleared: "✅ 知識庫已清空"
+  clear_failed: "❌ 清空失敗"
+  answer_generation_failed: "❌ 生成回答失敗"
+  no_relevant_info: "知識庫中沒有找到相關信息。"
+
+providers:
+  ollama: "Ollama (本地免費)"
+  deepseek: "DeepSeek (在線，便宜)"
+  qwen: "通義千問 (在線)"

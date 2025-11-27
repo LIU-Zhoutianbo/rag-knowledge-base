@@ -1,0 +1,68 @@
+# English Language Configuration
+
+app:
+  title: "RAG Knowledge Base Q&A System"
+  description: "Intelligent Q&A System Based on Retrieval-Augmented Generation"
+  
+sidebar:
+  settings: "⚙️ System Settings"
+  llm_config: "🤖 LLM Configuration"
+  select_provider: "Select LLM Provider"
+  ollama_local: "Ollama (Local Free)"
+  deepseek_online: "DeepSeek (Online, Cheap)"
+  qwen_online: "Qwen (Online)"
+  ollama_url: "Ollama URL"
+  select_model: "Select Model"
+  api_key: "API Key"
+  temperature: "Temperature"
+  max_tokens: "Max Tokens"
+  initialize_rag: "🚀 Initialize RAG System"
+  
+  document_management: "📁 Document Management"
+  upload_documents: "Upload Documents"
+  process_documents: "📤 Process and Add Documents"
+  
+  knowledge_base_info: "📊 Knowledge Base Info"
+  document_chunks: "Document Chunks"
+  clear_knowledge_base: "🗑️ Clear Knowledge Base"
+  
+  language_settings: "🌐 Language Settings"
+  select_language: "Select Language"
+
+main:
+  usage_instructions: "ℹ️ Usage Instructions"
+  step1: "1. Select LLM provider in sidebar and initialize RAG system"
+  step2: "2. Upload documents to knowledge base"
+  step3: "3. Start asking questions!"
+  
+  empty_knowledge_base: "⚠️ Knowledge base is empty, please upload documents first"
+  
+  view_sources: "📖 View Sources"
+  source: "Source"
+  similarity: "Similarity"
+  response_time: "⏱️ Response time"
+  seconds: "seconds"
+  
+  input_placeholder: "Enter your question..."
+  thinking: "🤔 Thinking..."
+
+messages:
+  rag_initialized: "✅ RAG system initialized successfully!"
+  initialization_failed: "❌ Initialization failed"
+  processing_documents: "Processing documents..."
+  document_processed: "✅ Document processed successfully!"
+  documents_count: "Documents count"
+  chunks_count: "Chunks count"
+  total_characters: "Total characters"
+  avg_chunk_size: "Average chunk size"
+  characters: "characters"
+  processing_failed: "❌ Document processing failed"
+  knowledge_base_cleared: "✅ Knowledge base cleared"
+  clear_failed: "❌ Clear failed"
+  answer_generation_failed: "❌ Answer generation failed"
+  no_relevant_info: "No relevant information found in knowledge base."
+
+providers:
+  ollama: "Ollama (Local Free)"
+  deepseek: "DeepSeek (Online, Cheap)"
+  qwen: "Qwen (Online)"

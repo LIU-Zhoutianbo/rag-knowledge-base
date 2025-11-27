@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  rag-app:
+    build: .
+    container_name: rag-knowledge-base
+    ports:
+      - "8501:8501"
+    volumes:
+      # 持久化向量数据库
+      - ./vector_store:/app/vector_store
+      # 持久化日志
+      - ./logs:/app/logs
+      # 如果需要挂载本地文档
+      # - ./documents:/app/documents
+    environment:
+      # Ollama 配置（如果使用本地 Ollama）
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      # DeepSeek 配置（如果使用）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=https://api.deepseek.com
+      # 通义千问配置（如果使用）
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+      # Hugging Face 镜像（加速模型下载）
+      - HF_ENDPOINT=https://hf-mirror.com
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 可选：本地 Ollama 服务
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+
+# volumes:
+#   ollama_data:

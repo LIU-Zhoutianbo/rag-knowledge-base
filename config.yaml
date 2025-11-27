@@ -1,0 +1,89 @@
+# RAG 知识库问答系统配置
+
+app:
+  title: "RAG 知识库问答系统"
+  description: "基于检索增强生成的智能问答系统"
+  page_icon: "📚"
+
+# 文档处理配置
+document:
+  chunk_size: 1000
+  chunk_overlap: 200
+  supported_formats:
+    - "pdf"
+    - "txt"
+    - "md"
+    - "docx"
+  max_file_size_mb: 50
+
+# 嵌入模型配置
+embeddings:
+  model_name: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  # 备选模型：
+  # - "sentence-transformers/all-MiniLM-L6-v2" (英文，更快)
+  # - "BAAI/bge-small-zh-v1.5" (中文优化)
+  device: "cpu"
+
+# 向量数据库配置
+vector_store:
+  type: "chromadb"
+  persist_directory: "./vector_store"
+  collection_name: "knowledge_base"
+
+# 检索配置
+retrieval:
+  search_type: "similarity"
+  top_k: 4
+  score_threshold: 0.5
+
+# LLM 配置
+llm:
+  providers:
+    ollama:
+      base_url: "http://localhost:11434"
+      models:
+        - name: "llama2"
+          display_name: "Llama 2 (本地免费)"
+        - name: "mistral"
+          display_name: "Mistral (本地免费)"
+        - name: "qwen:7b"
+          display_name: "Qwen 7B (本地免费)"
+    
+    deepseek:
+      base_url: "https://api.deepseek.com"
+      models:
+        - name: "deepseek-chat"
+          display_name: "DeepSeek Chat (在线，便宜)"
+    
+    qwen:
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      models:
+        - name: "qwen-turbo"
+          display_name: "通义千问 Turbo (在线)"
+
+  default_provider: "ollama"
+  default_model: "llama2"
+  temperature: 0.3
+  max_tokens: 2000
+
+# 提示词模板
+prompts:
+  system: |
+    你是一个专业的知识库助手。你的任务是根据提供的上下文信息回答用户的问题。
+    
+    规则：
+    1. 只使用提供的上下文信息回答问题
+    2. 如果上下文中没有相关信息，明确告知用户
+    3. 回答要准确、简洁、专业
+    4. 如果可能，引用具体的文档片段
+    5. 保持客观，不要添加未经证实的信息
+  
+  question_template: |
+    基于以下上下文信息回答问题。如果上下文中没有相关信息，请说"根据现有知识库，我无法回答这个问题"。
+    
+    上下文信息：
+    {context}
+    
+    问题：{question}
+    
+    回答：
