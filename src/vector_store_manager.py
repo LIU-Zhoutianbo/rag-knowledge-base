@@ -18,7 +18,9 @@ class VectorStoreManager:
         self,
         persist_directory: str = "./vector_store",
         collection_name: str = "knowledge_base",
-        embedding_model: str = "./models/paraphrase-multilingual-MiniLM-L12-v2"
+        embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        device: str = "cpu",
+
     ):
         """
         初始化向量存储管理器
@@ -38,8 +40,8 @@ class VectorStoreManager:
         print(f"正在加载嵌入模型: {embedding_model}")
         self.embeddings = HuggingFaceEmbeddings(
             model_name=embedding_model,
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True},
+            model_kwargs={'device': device},
+            encode_kwargs={'normalize_embeddings': True, 'batch_size': 64},
         )
         
         # 初始化或加载向量存储
@@ -144,7 +146,11 @@ class VectorStoreManager:
     def get_collection_info(self) -> dict:
         """获取集合信息"""
         try:
-            count = self.vector_store._collection.count()
+            count = 0
+            try:
+                count = self.vector_store._collection.count()
+            except Exception:
+                count = self.vector_store.collection.count() if hasattr(self.vector_store, 'collection') else 0
             return {
                 'collection_name': self.collection_name,
                 'document_count': count,

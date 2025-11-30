@@ -6,10 +6,14 @@ RAG 链模块
 from typing import List, Dict, Optional
 import requests
 import json
+import os
 
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+import time
+import re
+from difflib import SequenceMatcher
 
 
 class RAGChain:
@@ -70,7 +74,8 @@ class RAGChain:
         }
         
         try:
-            response = requests.post(url, json=payload, timeout=120)
+            t = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+            response = requests.post(url, json=payload, timeout=t)
             response.raise_for_status()
             result = response.json()
             return result.get('response', '')
@@ -98,7 +103,7 @@ class RAGChain:
         }
         
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             result = response.json()
             return result['choices'][0]['message']['content']
@@ -126,7 +131,7 @@ class RAGChain:
         }
         
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             result = response.json()
             return result['choices'][0]['message']['content']
@@ -191,9 +196,24 @@ class RAGChain:
                 question=question
             )
             
-            # 4. 生成答案
-            answer = self._generate_response(prompt)
-            
+            # 4. 生成答案（失败回退到检索来源提示）
+            try:
+                answer = self._generate_response(prompt)
+            except Exception:
+                answer = ""
+            if not answer or not answer.strip():
+                extractive = self._extractive_answer(context, question)
+                if extractive.strip():
+                    return {
+                        'answer': extractive,
+                        'sources': sources,
+                        'error': None
+                    }
+                return {
+                    'answer': '根据现有知识库，我无法回答这个问题',
+                    'sources': sources,
+                    'error': None
+                }
             return {
                 'answer': answer,
                 'sources': sources,
@@ -201,8 +221,63 @@ class RAGChain:
             }
         
         except Exception as e:
-            return {
-                'answer': '',
-                'sources': [],
-                'error': str(e)
-            }
+            try:
+                return {
+                    'answer': '根据现有知识库，我无法回答这个问题',
+                    'sources': [],
+                    'error': None
+                }
+            except Exception:
+                return {
+                    'answer': '',
+                    'sources': [],
+                    'error': str(e)
+                }
+
+    def _extractive_answer(self, context: str, question: str) -> str:
+        sentences = re.split(r"[\n。！？!?]+", context)
+        def score(s):
+            return SequenceMatcher(None, s, question).ratio()
+        scored = [(s, score(s)) for s in sentences if s and s.strip()]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top = [s for s, _ in scored[:3]]
+        return "\n".join(top).strip()
+
+    def llm_health(self) -> Dict:
+        start = time.time()
+        provider = self.llm_provider
+        model = self.model_name
+        try:
+            if provider == "ollama":
+                import requests
+                url = f"{self.base_url}/api/tags"
+                r = requests.get(url, timeout=5)
+                r.raise_for_status()
+                data = r.json()
+                names = []
+                if isinstance(data, dict) and isinstance(data.get("models"), list):
+                    names = [m.get("name") for m in data.get("models")]
+                elif isinstance(data, list):
+                    names = [m.get("name") for m in data]
+                ok = model in names if names else True
+                latency = (time.time() - start) * 1000
+                return {"provider": provider, "model": model, "ok": ok, "message": None if ok else "模型未在 Ollama 中可用", "latency_ms": latency}
+            elif provider in ("deepseek", "qwen"):
+                import requests
+                if not self.api_key:
+                    latency = (time.time() - start) * 1000
+                    return {"provider": provider, "model": model, "ok": False, "message": "缺少 API Key", "latency_ms": latency}
+                url = f"{self.base_url}/chat/completions"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {"model": model, "messages": [{"role": "system", "content": "health"}, {"role": "user", "content": "ping"}], "max_tokens": 1, "temperature": 0}
+                r = requests.post(url, headers=headers, json=payload, timeout=5)
+                ok = r.status_code == 200
+                msg = None if ok else f"HTTP {r.status_code}"
+                latency = (time.time() - start) * 1000
+                return {"provider": provider, "model": model, "ok": ok, "message": msg, "latency_ms": latency}
+            else:
+                latency = (time.time() - start) * 1000
+                return {"provider": provider, "model": model, "ok": False, "message": "不支持的提供商", "latency_ms": latency}
+        except Exception as e:
+            latency = (time.time() - start) * 1000
+            return {"provider": provider, "model": model, "ok": False, "message": str(e), "latency_ms": latency}

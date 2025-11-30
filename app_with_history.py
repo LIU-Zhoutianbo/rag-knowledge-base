@@ -1,7 +1,7 @@
 """
 RAG 知识库问答系统 - 完整版（多语言 + 聊天历史）
 """
-
+import requests
 import streamlit as st
 import yaml
 import os
@@ -19,6 +19,8 @@ from src.chat_history_manager import ChatHistoryManager
 
 # 加载环境变量
 load_dotenv()
+FASTAPI_BASE = os.getenv("FASTAPI_BASE", "http://localhost:8000")
+FASTAPI_URL = f"{FASTAPI_BASE}/query"
 
 # 页面配置
 st.set_page_config(
@@ -108,6 +110,13 @@ def load_config():
     """加载配置文件"""
     with open('config.yaml', 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+def get_backend_collection_info():
+    try:
+        r = requests.get(f"{FASTAPI_BASE}/vector-store/info", timeout=10)
+        return r.json()
+    except Exception:
+        return st.session_state.vector_store_manager.get_collection_info()
 
 
 def initialize_session_state():
@@ -295,6 +304,10 @@ def render_sidebar():
                             temperature=temperature,
                             max_tokens=max_tokens
                         )
+                        st.session_state.llm_provider = llm_provider
+                        st.session_state.llm_model_name = model_name
+                        st.session_state.llm_base_url = base_url
+                        st.session_state.llm_api_key = api_key
                     st.success(i18n('messages.rag_initialized'))
                 except Exception as e:
                     st.error(f"{i18n('messages.initialization_failed')}: {str(e)}")
@@ -316,61 +329,112 @@ def render_sidebar():
         st.markdown("---")
         st.markdown(f"### {i18n('sidebar.knowledge_base_info')}")
         
-        info = st.session_state.vector_store_manager.get_collection_info()
+        info = get_backend_collection_info()
         st.metric(i18n('sidebar.document_chunks'), info['document_count'])
         
         if st.button(i18n('sidebar.clear_knowledge_base'), use_container_width=True):
             try:
-                st.session_state.vector_store_manager.delete_collection()
-                st.session_state.vector_store_manager = VectorStoreManager(
-                    persist_directory=st.session_state.config['vector_store']['persist_directory'],
-                    collection_name=st.session_state.config['vector_store']['collection_name'],
-                    embedding_model=st.session_state.config['embeddings']['model_name']
-                )
-                st.success(i18n('messages.knowledge_base_cleared'))
-                st.rerun()
+                resp = requests.delete(f"{FASTAPI_BASE}/vector-store/collection", timeout=30)
+                if resp.status_code == 200 and resp.json().get('status') == 'cleared':
+                    # 重新初始化本地管理器以保持状态一致
+                    st.session_state.vector_store_manager = VectorStoreManager(
+                        persist_directory=st.session_state.config['vector_store']['persist_directory'],
+                        collection_name=st.session_state.config['vector_store']['collection_name'],
+                        embedding_model=st.session_state.config['embeddings']['model_name']
+                    )
+                    st.success(i18n('messages.knowledge_base_cleared'))
+                    st.rerun()
+                else:
+                    st.error(f"{i18n('messages.clear_failed')}: {resp.text}")
             except Exception as e:
                 st.error(f"{i18n('messages.clear_failed')}: {str(e)}")
 
 
 def process_documents(uploaded_files):
-    """处理上传的文档"""
     i18n = st.session_state.i18n
-    
     try:
         with st.spinner(i18n('messages.processing_documents')):
-            temp_dir = Path("./temp_uploads")
-            temp_dir.mkdir(exist_ok=True)
-            
-            all_documents = []
-            
-            for uploaded_file in uploaded_files:
-                file_path = temp_dir / uploaded_file.name
-                with open(file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                documents = st.session_state.document_processor.process_document(str(file_path))
-                all_documents.extend(documents)
-                
-                file_path.unlink()
-            
-            st.session_state.vector_store_manager.add_documents(all_documents)
-            
-            info = st.session_state.document_processor.get_document_info(all_documents)
-            
+            files_payload = []
+            for uf in uploaded_files:
+                try:
+                    content = uf.getvalue()
+                except Exception:
+                    content = uf.getbuffer()
+                files_payload.append(('files', (uf.name, content, uf.type or 'application/octet-stream')))
+            r = requests.post(f"{FASTAPI_BASE}/vector-store/upload_async", files=files_payload, timeout=20)
+            r.raise_for_status()
+            tid = r.json().get('task_id')
+            if not tid:
+                st.error(i18n('messages.processing_failed'))
+                return
+            progress = st.progress(0)
+            start = time.time()
+            inserted = 0
+            total = len(uploaded_files)
+            while True:
+                s = requests.get(f"{FASTAPI_BASE}/tasks/{tid}", timeout=10)
+                info = s.json()
+                status = info.get('status')
+                processed = info.get('processed_files', 0)
+                inserted = info.get('inserted', inserted)
+                progress.progress(min(int(processed * 100 / max(total,1)), 100))
+                if status == 'done':
+                    break
+                if status == 'error':
+                    st.error(f"{i18n('messages.processing_failed')}: {info.get('error')}")
+                    return
+                if time.time() - start > 300:
+                    st.error(i18n('messages.processing_failed'))
+                    return
+                time.sleep(1)
+            info_resp = {}
+            try:
+                rr = requests.get(f"{FASTAPI_BASE}/vector-store/info", timeout=10)
+                info_resp = rr.json()
+            except Exception:
+                info_resp = st.session_state.vector_store_manager.get_collection_info()
             st.markdown(f"""
             <div class="success-box">
                 <strong>{i18n('messages.document_processed')}</strong><br>
                 • {i18n('messages.documents_count')}: {len(uploaded_files)}<br>
-                • {i18n('messages.chunks_count')}: {info['total_chunks']}<br>
-                • {i18n('messages.total_characters')}: {info['total_characters']:,}<br>
-                • {i18n('messages.avg_chunk_size')}: {info['avg_chunk_size']} {i18n('messages.characters')}
+                • 新增切片: {inserted}<br>
+                • 当前总切片: {info_resp.get('document_count', 0)}
             </div>
             """, unsafe_allow_html=True)
-    
     except Exception as e:
         st.error(f"{i18n('messages.processing_failed')}: {str(e)}")
 
+def query_rag(question, session_id=None):
+    payload = {"question": question, "session_id": session_id}
+    lp = st.session_state.get('llm_provider')
+    mn = st.session_state.get('llm_model_name')
+    bu = st.session_state.get('llm_base_url')
+    ak = st.session_state.get('llm_api_key')
+    if lp or mn or bu or ak:
+        payload.update({
+            "llm_provider": lp,
+            "model_name": mn,
+            "base_url": bu,
+            "api_key": ak
+        })
+    try:
+        resp = requests.post(FASTAPI_URL, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("error"):
+            return {"answer": "", "sources": [], "error": data["error"]}
+        return {"answer": data.get("answer", ""), "sources": data.get("sources", [])}
+    except requests.RequestException as e:
+        return {"answer": "", "sources": [], "error": f"后端不可用或请求失败: {e}"}
+    except Exception as e:
+        return {"answer": "", "sources": [], "error": str(e)}
+
+def check_backend_alive():
+    try:
+        r = requests.get(f"{FASTAPI_BASE}/health", timeout=5)
+        return r.status_code == 200
+    except Exception:
+        return False
 
 def render_chat_interface():
     """渲染聊天界面"""
@@ -388,12 +452,13 @@ def render_chat_interface():
             {i18n('main.step3')}
         </div>
         """, unsafe_allow_html=True)
-        return
+
+    if not check_backend_alive():
+        st.warning("后端服务未启动或不可用，请先启动 FastAPI（uvicorn backend.main:app --port 8000）")
     
-    info = st.session_state.vector_store_manager.get_collection_info()
+    info = get_backend_collection_info()
     if info['document_count'] == 0:
         st.warning(i18n('main.empty_knowledge_base'))
-        return
     
     # 加载当前会话的消息
     if not st.session_state.chat_messages:
@@ -421,42 +486,33 @@ def render_chat_interface():
                             </div>
                             """, unsafe_allow_html=True)
     
-    # 输入区域
+    # 输入区域（页面底部，按 Enter 发送）
     user_question = st.chat_input(i18n('main.input_placeholder'))
-    
     if user_question:
-        # 添加用户消息
-        st.session_state.chat_messages.append({
-            'role': 'user',
-            'content': user_question
-        })
-        
-        # 保存到数据库
+        st.session_state.chat_messages.append({'role': 'user', 'content': user_question})
         st.session_state.chat_history_manager.add_message(
             st.session_state.current_session_id,
             'user',
             user_question
         )
-        
-        # 显示用户消息
         with st.chat_message("user"):
             st.write(user_question)
-        
-        # 生成回答
         with st.chat_message("assistant"):
             with st.spinner(i18n('main.thinking')):
                 start_time = time.time()
-                result = st.session_state.rag_chain.query(user_question)
+                result = query_rag(user_question, st.session_state.current_session_id)
                 end_time = time.time()
-                
-                if result['error']:
-                    st.error(f"{i18n('messages.answer_generation_failed')}: {result['error']}")
+                error_msg = result.get('error')
+                answer = result.get('answer')
+                sources = result.get('sources', [])
+                if error_msg:
+                    st.error(f"{i18n('messages.answer_generation_failed')}: {error_msg}")
                 else:
-                    st.write(result['answer'])
-                    
-                    if result['sources']:
+                    if answer:
+                        st.write(answer)
+                    if sources:
                         with st.expander(i18n('main.view_sources')):
-                            for i, source in enumerate(result['sources'], 1):
+                            for i, source in enumerate(sources, 1):
                                 st.markdown(f"""
                                 <div class="source-card">
                                     <strong>{i18n('main.source')} {i}:</strong> {source['source']} 
@@ -464,28 +520,17 @@ def render_chat_interface():
                                     <em>{source['content']}</em>
                                 </div>
                                 """, unsafe_allow_html=True)
-                    
                     st.caption(f"{i18n('main.response_time')}: {end_time - start_time:.2f} {i18n('main.seconds')}")
-                    
-                    # 添加到历史
-                    st.session_state.chat_messages.append({
-                        'role': 'assistant',
-                        'answer': result['answer'],
-                        'sources': result['sources']
-                    })
-                    
-                    # 保存到数据库
+                    st.session_state.chat_messages.append({'role': 'assistant', 'answer': answer, 'sources': sources})
                     st.session_state.chat_history_manager.add_message(
                         st.session_state.current_session_id,
                         'assistant',
-                        result['answer'],
-                        result['sources']
+                        answer,
+                        sources
                     )
-                    
-                    # 自动更新会话标题（使用第一个问题）
                     sessions = st.session_state.chat_history_manager.get_all_sessions(limit=1)
                     if sessions and sessions[0]['session_id'] == st.session_state.current_session_id:
-                        if sessions[0]['message_count'] == 2:  # 第一轮对话
+                        if sessions[0]['message_count'] == 2:
                             title = user_question[:30] + "..." if len(user_question) > 30 else user_question
                             st.session_state.chat_history_manager.update_session_title(
                                 st.session_state.current_session_id,

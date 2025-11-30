@@ -40,3 +40,4 @@ models/
 # 向量数据库
 vector_store/
 chroma_db/
+models/
